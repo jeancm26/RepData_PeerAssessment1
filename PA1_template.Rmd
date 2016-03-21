@@ -1,25 +1,238 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Course Project 1"
+author: "Jean Machado"
+date: "19 de marzo de 2016"
+#output: html_document
 ---
 
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+library(lubridate)
+library(ggplot2)
+library(chron)
+```
 
-## Loading and preprocessing the data
+```{r warning=FALSE, echo=FALSE}
+# Multiple plot function
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+
+___
+##Transform Data
+1. Transform data column "date" and "interval"
+```{r warning=FALSE}
+Activity <- read.csv(file = "activity.csv")
+Activity$date <- ymd(Activity$date)
+```
+
+___
+##What is mean total number of steps taken per day?
+
+1. Calculate the total number of steps taken per day
+```{r warning=FALSE}
+StepTotal <- tapply(X = Activity$steps, INDEX = Activity$date, FUN = sum, na.rm = TRUE)
+StepTotal <- as.data.frame(StepTotal, row.names = NULL)
+names(StepTotal) <- make.names(c("steps"))
+StepTotal$date <- row.names(StepTotal)
+StepTotal$date <- ymd(StepTotal$date)
+StepTotal$steps <- as.integer(StepTotal$steps)
+row.names(StepTotal) <- NULL
+```
+
+2. If you do not understand the difference between a histogram and a barplot, research the difference between them. Make a histogram of the total number of steps taken each day
+
+```{r warning=FALSE}
+p1 <- ggplot(data = StepTotal, mapping = aes(x = steps)) + geom_histogram(bins = 50)+ ggtitle("Total numbers steps")
+p1
+```
+
+3. Calculate and report the mean and median of the total number of steps taken per day
+
+```{r warning=FALSE, results='hide'}
+#Mean
+StepMean <- tapply(X = Activity$steps, INDEX = Activity$date, FUN = mean, na.rm = TRUE)
+StepMean <- as.data.frame(StepMean, row.names = NULL)
+names(StepMean) <- make.names(c("steps"))
+StepMean$date <- row.names(StepMean)
+StepMean$date <- ymd(StepMean$date)
+StepMean$steps <- as.integer(StepMean$steps)
+row.names(StepMean) <- NULL
+#Median
+StepMedian <- tapply(X = Activity$steps, INDEX = Activity$date, FUN = median, na.rm = TRUE)
+StepMedian <- as.data.frame(StepMedian, row.names = NULL)
+names(StepMedian) <- make.names(c("steps"))
+StepMedian$date <- row.names(StepMedian)
+StepMedian$date <- ymd(StepMedian$date)
+StepMedian$steps <- as.integer(StepMedian$steps)
+row.names(StepMedian) <- NULL
+```
+ Plot mean and median
+```{r warning=FALSE}
+p2 <- ggplot(data = StepMean, mapping = aes(x = steps)) + geom_histogram(bins = 50)+ ggtitle("Mean steps")
+p2
+p3 <- ggplot(data = StepMedian, mapping = aes(x = steps)) + geom_histogram(bins = 50)+ ggtitle("Median steps")
+p3
+```
+
+___
+##What is the average daily activity pattern?
+
+1. Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+
+```{r warning=FALSE}
+png(filename = "MeanSteps02.png", width = 480, height = 480)
+ggplot(data = StepMean, mapping = aes(x = date, y = steps)) + geom_line()+ ggtitle("Mean steps")
+dev.off()
+```
+
+2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+
+```{r warning=FALSE}
+Max <- max(Activity$steps, na.rm = TRUE)
+StepMax <- subset(x = Activity, subset = steps==Max)
+StepMax
+```
+
+___
+##Imputing missing values
+
+1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+
+Total number of NAs in Step rows is: `r sum(is.na(Activity$steps))`
+
+2.Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+
+Strategy: Sustitute all NAs with the mean of all value of same interval
 
 
+3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+```{r warning=FALSE}
+ActivityNew <- Activity
+IntervalMean <- aggregate(x = ActivityNew, by = list(ActivityNew$interval), FUN = mean, na.rm=TRUE)
+for (i in 1:nrow(ActivityNew)) {
+  if (is.na(ActivityNew[i,]$step)){
+    ActivityNew[i,]$steps <- subset(x = IntervalMean, subset = IntervalMean$interval==ActivityNew[i,]$interval)$steps
+  }
+}
+```
 
-## What is mean total number of steps taken per day?
+Total number of NAs in Step rows **after filled** is: `r sum(is.na(ActivityNew$steps))`
 
+4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
 
+```{r warning=FALSE}
+#Total
+StepTotal <- tapply(X = ActivityNew$steps, INDEX = ActivityNew$date, FUN = sum, na.rm = TRUE)
+StepTotal <- as.data.frame(StepTotal, row.names = NULL)
+names(StepTotal) <- make.names(c("steps"))
+StepTotal$date <- row.names(StepTotal)
+StepTotal$date <- ymd(StepTotal$date)
+StepTotal$steps <- as.integer(StepTotal$steps)
+row.names(StepTotal) <- NULL
+#Mean
+StepMean <- tapply(X = ActivityNew$steps, INDEX = ActivityNew$date, FUN = mean, na.rm = TRUE)
+StepMean <- as.data.frame(StepMean, row.names = NULL)
+names(StepMean) <- make.names(c("steps"))
+StepMean$date <- row.names(StepMean)
+StepMean$date <- ymd(StepMean$date)
+StepMean$steps <- as.integer(StepMean$steps)
+row.names(StepMean) <- NULL
+#Median
+StepMedian <- tapply(X = ActivityNew$steps, INDEX = ActivityNew$date, FUN = median, na.rm = TRUE)
+StepMedian <- as.data.frame(StepMedian, row.names = NULL)
+names(StepMedian) <- make.names(c("steps"))
+StepMedian$date <- row.names(StepMedian)
+StepMedian$date <- ymd(StepMedian$date)
+StepMedian$steps <- as.integer(StepMedian$steps)
+row.names(StepMedian) <- NULL
 
-## What is the average daily activity pattern?
+p4 <- ggplot(data = StepTotal, mapping = aes(x = steps)) + geom_histogram(bins = 50)+ ggtitle("Total numbers steps after filled")
+p5 <- ggplot(data = StepMean, mapping = aes(x = steps)) + geom_histogram(bins = 50)+ ggtitle("Mean steps after filled")
+p6 <- ggplot(data = StepMedian, mapping = aes(x = steps)) + geom_histogram(bins = 50)+ ggtitle("Median steps after filled")
+multiplot(p1, p4, cols=2)
+multiplot(p2, p5, cols=2)
+multiplot(p3, p6, cols=2)
+```
 
+___
+##Are there differences in activity patterns between weekdays and weekends?
 
+For this part the weekdays() function may be of some help here. Use the dataset with the filled-in missing values for this part.
 
-## Imputing missing values
+1. Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+```{r}
+#Total Step
+ActivityNew$weekday <- is.weekend(ActivityNew$date)
+StepTotal <- aggregate(x = ActivityNew$steps, by = list(ActivityNew$interval, ActivityNew$weekday), FUN = mean, na.rm=TRUE)
+names(StepTotal) <- make.names(c("Interval", "Weekday", "Steps"))
+WeekendDays <- grep(pattern = TRUE, x = StepTotal$Weekday)
+WeekdayDays <- grep(pattern = FALSE, x = StepTotal$Weekday)
+StepTotal[WeekendDays,]$Weekday <- "Weekend"
+StepTotal[WeekdayDays,]$Weekday <- "Weekday"
+```
 
+2. Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). See the README file in the GitHub repository to see an example of what this plot should look like using simulated data.
 
+```{r}
+p7 <- qplot(x = Interval, y = Steps, data = StepTotal, facets = .~Weekday,  geom = "line")
+p7
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+```{r echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+
+png(filename = "TotalNumbersStepsAfterFilled.png", width = 480, height = 480)
+multiplot(p1, p4, cols=2)
+dev.off()
+png(filename = "MeanStepsAfterFilled.png", width = 480, height = 480)
+multiplot(p2, p5, cols=2)
+dev.off()
+png(filename = "MedianStepsAfterFilled.png", width = 480, height = 480)
+multiplot(p3, p6, cols=2)
+dev.off()
+png(filename = "TimeSeries.png", width = 480, height = 480)
+p7
+dev.off()
+```
+
